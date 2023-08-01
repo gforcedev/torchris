@@ -1,9 +1,14 @@
-import { addPiece, Coord, createBag, Pieces } from "./pieces";
+import { Coord, createBag, Pieces } from "./pieces";
 import colors from "tailwindcss/colors";
 import "./style.css";
 
 const c = document.getElementById("canvas") as HTMLCanvasElement;
 var ctx = c.getContext("2d") as CanvasRenderingContext2D;
+
+const torchCanvas = document.createElement("canvas");
+torchCanvas.width = c.width;
+torchCanvas.height = c.height;
+const torchContext = torchCanvas.getContext("2d")!;
 
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 22;
@@ -11,6 +16,11 @@ const BOARD_HEIGHT = 22;
 const SPACE_HEIGHT = 20;
 const BLOCK_HEIGHT = SPACE_HEIGHT - 2;
 const BLOCK_DRAW_Y_OFFSET = SPACE_HEIGHT * 2 - BLOCK_HEIGHT / 4;
+
+const TORCH_RADIUS = 100;
+
+let dead = false;
+let linesScored = 0;
 
 const firstBag = createBag();
 const state = {
@@ -27,7 +37,7 @@ const state = {
 addPiece(state.bag.pop()!, state.board, 5, 1);
 
 // document.addEventListener("keydown", update);
-const updateInterval = setInterval(update, 1000 / 10);
+setInterval(update, 1000 / 10);
 setInterval(drawFrame, 10);
 document.addEventListener("keydown", (event) => {
   if (event.key === "a") {
@@ -42,6 +52,10 @@ document.addEventListener("keydown", (event) => {
 });
 
 function update() {
+  if (dead) {
+    return;
+  }
+
   const currOccupied = computeOccupied();
 
   if (checkIfCanDrop(currOccupied)) {
@@ -56,6 +70,7 @@ function update() {
         ...state.board.slice(0, row),
         ...state.board.slice(row + 1),
       ];
+      linesScored++;
     }
   }
 
@@ -63,9 +78,11 @@ function update() {
 }
 
 function drawFrame() {
+  document.getElementById("score")!.innerHTML = linesScored.toString();
+
   ctx.clearRect(0, 0, c.width, c.height);
-  // Grey background
-  ctx.fillStyle = colors.gray[800];
+  // Background
+  ctx.fillStyle = dead ? colors.red[800] : colors.gray[800];
   ctx.fillRect(0, 0, c.width, c.height);
 
   state.board.forEach((row, i) => {
@@ -78,13 +95,36 @@ function drawFrame() {
 
       ctx.fillRect(
         j * SPACE_HEIGHT + 1,
-        // i * SPACE_HEIGHT + 1 - BLOCK_DRAW_Y_OFFSET,
-        i * SPACE_HEIGHT + 1,
+        i * SPACE_HEIGHT + 1 - BLOCK_DRAW_Y_OFFSET,
+        // i * SPACE_HEIGHT + 1,
         BLOCK_HEIGHT,
         BLOCK_HEIGHT
       );
     });
   });
+
+  if (dead) {
+    return;
+  }
+
+  torchContext.clearRect(0, 0, c.width, c.height);
+  const gradient = torchContext.createRadialGradient(
+    state.currPiecePosition.x * SPACE_HEIGHT,
+    state.currPiecePosition.y * SPACE_HEIGHT - BLOCK_DRAW_Y_OFFSET,
+    0,
+    state.currPiecePosition.x * SPACE_HEIGHT,
+    state.currPiecePosition.y * SPACE_HEIGHT - BLOCK_DRAW_Y_OFFSET,
+    TORCH_RADIUS
+  );
+  gradient.addColorStop(1, "rgba(0,0,0,0.05)");
+  gradient.addColorStop(0, "rgba(0,0,0,1)");
+  torchContext.fillStyle = gradient;
+  torchContext.fillRect(0, 0, c.width, c.height);
+  torchContext.fillStyle = "#000";
+  torchContext.globalCompositeOperation = "xor";
+  torchContext.fillRect(0, 0, c.width, c.height);
+
+  ctx.drawImage(torchCanvas, 0, 0);
 }
 
 function computeOccupied() {
@@ -105,7 +145,7 @@ function addPiece(
 ) {
   for (let coord of Pieces[name].blocks[0]) {
     if (board[y + coord.y][x + coord.x] !== "") {
-      clearInterval(updateInterval);
+      dead = true;
     }
 
     board[y + coord.y][x + coord.x] = Pieces[name].color;
